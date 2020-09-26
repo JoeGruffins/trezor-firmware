@@ -8,7 +8,7 @@ if __debug__:
     try:
         from typing import Dict, List  # noqa: F401
         from typing_extensions import Literal  # noqa: F401
-        EnumTypeInputScriptType = Literal[0, 1, 2, 3, 4]
+        EnumTypeInputScriptType = Literal[0, 1, 2, 3, 4, 5, 6]
     except ImportError:
         pass
 
@@ -38,5 +38,5 @@ class GetAddress(p.MessageType):
             2: ('coin_name', p.UnicodeType, "Bitcoin"),  # default=Bitcoin
             3: ('show_display', p.BoolType, None),
             4: ('multisig', MultisigRedeemScriptType, None),
-            5: ('script_type', p.EnumType("InputScriptType", (0, 1, 2, 3, 4)), 0),  # default=SPENDADDRESS
+            5: ('script_type', p.EnumType("InputScriptType", (0, 1, 2, 3, 4, 5, 6)), 0),  # default=SPENDADDRESS
         }

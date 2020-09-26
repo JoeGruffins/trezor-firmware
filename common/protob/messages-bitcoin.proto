@@ -17,18 +17,24 @@ enum InputScriptType {
     EXTERNAL = 2;           // reserved for external inputs (coinjoin)
     SPENDWITNESS = 3;       // native SegWit
     SPENDP2SHWITNESS = 4;   // SegWit over P2SH (backward compatible)
+    SPENDSSRTX = 5;         // only for decred
+    SPENDSSGEN = 6;         // only for decred
 }
 
 /**
  * Type of script which will be used for transaction output
  */
 enum OutputScriptType {
-    PAYTOADDRESS = 0;       // used for all addresses (bitcoin, p2sh, witness)
-    PAYTOSCRIPTHASH = 1;    // p2sh address (deprecated; use PAYTOADDRESS)
-    PAYTOMULTISIG = 2;      // only for change output
-    PAYTOOPRETURN = 3;      // op_return
-    PAYTOWITNESS = 4;       // only for change output
-    PAYTOP2SHWITNESS = 5;   // only for change output
+    PAYTOADDRESS = 0;         // used for all addresses (bitcoin, p2sh, witness)
+    PAYTOSCRIPTHASH = 1;      // p2sh address (deprecated; use PAYTOADDRESS)
+    PAYTOMULTISIG = 2;        // only for change output
+    PAYTOOPRETURN = 3;        // op_return
+    PAYTOWITNESS = 4;         // only for change output
+    PAYTOP2SHWITNESS = 5;     // only for change output
+    SSTXSUBMISSIONPKH = 6;    // only for decred
+    SSTXSUBMISSIONSH = 7;     // only for decred
+    SSTXCHANGE = 8;           // only for decred
+    SSTXCOMMITMENTOWNED = 9;  // only for decred
 }
 
 /**

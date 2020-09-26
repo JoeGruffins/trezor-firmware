@@ -1,5 +1,6 @@
 from trezor import utils, wire
 from trezor.crypto import base58, cashaddr
+from trezor.crypto.base58 import blake256d_32
 from trezor.crypto.hashlib import sha256
 from trezor.messages import InputScriptType
 
@@ -41,7 +42,11 @@ def input_derive_script(
     pubkey: bytes,
     signature: bytes,
 ) -> bytes:
-    if script_type == InputScriptType.SPENDADDRESS:
+    if script_type in (
+        InputScriptType.SPENDADDRESS,
+        InputScriptType.SPENDSSRTX,
+        InputScriptType.SPENDSSGEN,
+    ):
         # p2pkh or p2sh
         return input_script_p2pkh_or_p2sh(pubkey, signature, hash_type)
 
@@ -58,18 +63,18 @@ def input_derive_script(
 
         # p2wpkh in p2sh
         return input_script_p2wpkh_in_p2sh(common.ecdsa_hash_pubkey(pubkey, coin))
-    elif script_type == InputScriptType.SPENDWITNESS:
+    if script_type == InputScriptType.SPENDWITNESS:
         # native p2wpkh or p2wsh
         return input_script_native_p2wpkh_or_p2wsh()
-    elif script_type == InputScriptType.SPENDMULTISIG:
+    if script_type == InputScriptType.SPENDMULTISIG:
         # p2sh multisig
         assert multisig is not None  # checked in sanitize_tx_input
         signature_index = multisig_pubkey_index(multisig, pubkey)
         return input_script_multisig(
             multisig, signature, signature_index, hash_type, coin
         )
-    else:
-        raise wire.ProcessError("Invalid script type")
+
+    raise wire.ProcessError("Invalid script type")
 
 
 def output_derive_script(address: str, coin: CoinInfo) -> bytes:
@@ -577,3 +582,96 @@ def append_signature(w: Writer, signature: bytes, hash_type: int) -> None:
 def append_pubkey(w: Writer, pubkey: bytes) -> None:
     write_op_push(w, len(pubkey))
     write_bytes_unchecked(w, pubkey)
+
+
+# Decred specific
+# ===
+
+# A submission for a script hash.
+def output_script_sstxsubmissionsh(addr: str) -> bytearray:
+    try:
+        raw_address = base58.decode_check(addr, blake256d_32)
+    except ValueError:
+        raise wire.DataError("Invalid address")
+    w = empty_bytearray(24)
+    w.append(0xBA)  # OP_SSTX
+    w.append(0xA9)  # OP_HASH160
+    w.append(0x14)  # OP_DATA_20
+    w.extend(raw_address[2:])
+    w.append(0x87)  # OP_EQUAL
+    return w
+
+
+# A submission for a an address hash.
+def output_script_sstxsubmissionpkh(addr: str) -> bytearray:
+    try:
+        raw_address = base58.decode_check(addr, blake256d_32)
+    except ValueError:
+        raise wire.DataError("Invalid address")
+    w = empty_bytearray(26)
+    w.append(0xBA)  # OP_SSTX
+    w.append(0x76)  # OP_DUP
+    w.append(0xA9)  # OP_HASH160
+    w.append(0x14)  # OP_DATA_20
+    w.extend(raw_address[2:])
+    w.append(0x88)  # OP_EQUALVERIFY
+    w.append(0xAC)  # OP_CHECKSIG
+    return w
+
+
+# A currently unused stake change script. Output amount has been checked to be
+# zero. The addr is also checked as to whether it pays to a zeroed hash.
+def output_script_sstxchange(addr: str) -> bytearray:
+    try:
+        raw_address = base58.decode_check(addr, blake256d_32)
+    except ValueError:
+        raise wire.DataError("Invalid address")
+    # Using change addresses is no longer common practice. Inputs are split
+    # beforehand.
+    for b in raw_address[2:]:
+        if b != 0:
+            raise wire.DataError("Only zeroed addresses accepted for sstx change")
+    w = empty_bytearray(26)
+    w.append(0xBD)  # OP_SSTXCHANGE
+    w.append(0x76)  # OP_DUP
+    w.append(0xA9)  # OP_HASH160
+    w.append(0x14)  # OP_DATA_20
+    w.extend(raw_address[2:])
+    w.append(0x88)  # OP_EQUALVERIFY
+    w.append(0xAC)  # OP_CHECKSIG
+    return w
+
+
+# Spend from a stake revocation.
+def input_script_ssrtx(pkh: bytes) -> bytearray:
+    utils.ensure(len(pkh) == 20)
+    s = bytearray(26)
+    s[0] = 0xBC  # OP_SSRTX
+    s[1] = 0x76  # OP_DUP
+    s[2] = 0xA9  # OP_HASH160
+    s[3] = 0x14  # OP_DATA_20
+    s[4:24] = pkh
+    s[24] = 0x88  # OP_EQUALVERIFY
+    s[25] = 0xAC  # OP_CHECKSIG
+    return s
+
+
+# Spend from a stake generation.
+def input_script_ssgen(pkh: bytes) -> bytearray:
+    utils.ensure(len(pkh) == 20)
+    s = bytearray(26)
+    s[0] = 0xBB  # OP_SSGEN
+    s[1] = 0x76  # OP_DUP
+    s[2] = 0xA9  # OP_HASH160
+    s[3] = 0x14  # OP_DATA_20
+    s[4:24] = pkh
+    s[24] = 0x88  # OP_EQUALVERIFY
+    s[25] = 0xAC  # OP_CHECKSIG
+    return s
+
+
+# Retrieve pkh bytes from a stake commitment OPRETURN.
+def pkh_from_sstxcommitment(s: bytes) -> bytes:
+    utils.ensure(len(s) == 30)
+    pkh = s[:20]
+    return pkh

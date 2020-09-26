@@ -35,7 +35,10 @@ def split_op_return(data: str) -> Iterator[str]:
 
 
 async def confirm_output(ctx: wire.Context, output: TxOutput, coin: CoinInfo) -> None:
-    if output.script_type == OutputScriptType.PAYTOOPRETURN:
+    if output.script_type in (
+        OutputScriptType.PAYTOOPRETURN,
+        OutputScriptType.SSTXCOMMITMENTOWNED,
+    ):
         data = output.op_return_data
         assert data is not None
         if omni.is_valid(data):
