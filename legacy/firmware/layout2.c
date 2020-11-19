@@ -360,6 +360,17 @@ void layoutConfirmOutput(const CoinInfo *coin, const TxOutputType *out) {
                         extra_line);
 }
 
+void layoutConfirmTicketPurchase(const CoinInfo *coin, const TxOutputType *out) {
+  char addr[32] = {0};
+  char rights[22] = {0};
+  bn_format_uint64(out->amount, NULL, coin->coin_shortcut, coin->decimals, 0,
+                   false, addr, sizeof(addr));
+  strlcat(rights, "with voting rights to", sizeof(rights));
+  const char *address = out->address;
+  render_address_dialog(coin, address, _("Purchase ticket"), rights,
+                        addr);
+}
+
 void layoutConfirmOmni(const uint8_t *data, uint32_t size) {
   const char *desc = NULL;
   char str_out[32] = {0};
@@ -432,6 +443,18 @@ void layoutConfirmTx(const CoinInfo *coin, uint64_t amount_out,
                    false, str_fee, sizeof(str_fee));
   layoutDialogSwipe(&bmp_icon_question, _("Cancel"), _("Confirm"), NULL,
                     _("Really send"), str_out, _("from your wallet?"),
+                    _("Fee included:"), str_fee, NULL);
+}
+
+void layoutConfirmTicket(const CoinInfo *coin, uint64_t amount_out,
+                     uint64_t amount_fee) {
+  char str_out[32] = {0}, str_fee[32] = {0};
+  bn_format_uint64(amount_out, NULL, coin->coin_shortcut, coin->decimals, 0,
+                   false, str_out, sizeof(str_out));
+  bn_format_uint64(amount_fee, NULL, coin->coin_shortcut, coin->decimals, 0,
+                   false, str_fee, sizeof(str_fee));
+  layoutDialogSwipe(&bmp_icon_question, _("Cancel"), _("Confirm"), NULL,
+                    _("Really purchase"), _("ticket for"), str_out,
                     _("Fee included:"), str_fee, NULL);
 }
 

@@ -199,6 +199,107 @@ int compile_output(const CoinInfo *coin, const HDNode *root, TxOutputType *in,
   uint8_t addr_raw[MAX_ADDR_RAW_SIZE] = {0};
   size_t addr_raw_len = 0;
 
+#if !BITCOIN_ONLY
+  if (coin->decred) {
+    if (in->script_type == OutputScriptType_SSTXCOMMITMENTOWNED) {
+      // only 0 satoshi allowed for SSTXCOMMITMENTOWNED
+      if (in->amount != 0 || in->has_address || (in->address_n_count == 0) ||
+          in->has_multisig) {
+        return 0;  // failed to compile output
+      }
+      // SSTXCOMMITMENTOWNED script must pay to the address at address_n.
+      static CONFIDENTIAL HDNode node;
+      memcpy(&node, root, sizeof(HDNode));
+      if (hdnode_private_ckd_cached(&node, in->address_n, in->address_n_count,
+                                    NULL) == 0) {
+        return 0;  // failed to compile output
+      }
+      hdnode_fill_public_key(&node);
+
+      char addr[MAX_ADDR_SIZE];
+      if (!compute_address(coin, InputScriptType_SPENDADDRESS, &node, in->has_multisig,
+                           &in->multisig, addr)) {
+        return 0;  // failed to compile output
+      }
+
+      base58_decode_check(addr, coin->curve->hasher_base58,
+                                         addr_raw, MAX_ADDR_RAW_SIZE);
+      size_t i = 0;
+      for(i = 0; i < 20; ++i) {
+        if (in->op_return_data.bytes[i] != addr_raw[i+2]) {
+          return 0; // must pay to the wallet
+        }
+      }
+      uint32_t r = 0;
+      out->script_pubkey.bytes[0] = 0x6A;
+      r++;  // OP_RETURN
+      r += op_push(in->op_return_data.size, out->script_pubkey.bytes + r);
+      memcpy(out->script_pubkey.bytes + r, in->op_return_data.bytes,
+             in->op_return_data.size);
+      r += in->op_return_data.size;
+      out->script_pubkey.size = r;
+      return r;
+    }
+    if (in->script_type == OutputScriptType_SSTXSUBMISSIONPKH ||
+        in->script_type == OutputScriptType_SSTXSUBMISSIONSH  ||
+        in->script_type == OutputScriptType_SSTXCHANGE) {
+      if (!in->has_address) {
+        return 0;  // failed to compile output
+      }
+
+      base58_decode_check(in->address, coin->curve->hasher_base58,
+                                       addr_raw, MAX_ADDR_RAW_SIZE);
+      size_t i = 0;
+      uint8_t addr_raw_nomagic[20] = {0};
+      for(i = 0; i < 20; ++i)
+        addr_raw_nomagic[i] = addr_raw[i+2];
+
+
+      if (in->script_type == OutputScriptType_SSTXCHANGE) {
+        for(i = 0; i < 20; ++i)
+          if (addr_raw_nomagic[i] != 0)
+            return 0; // SSTXCHANGE addr must be all zeros.
+      }
+
+      if (in->script_type == OutputScriptType_SSTXSUBMISSIONPKH) {
+        out->script_pubkey.bytes[0] = 0xBA;  // OP_SSTX
+        out->script_pubkey.bytes[1] = 0x76;  // OP_DUP
+        out->script_pubkey.bytes[2] = 0xA9;  // OP_HASH_160
+        out->script_pubkey.bytes[3] = 0x14;  // pushing 20 bytes
+        memcpy(out->script_pubkey.bytes + 4, addr_raw_nomagic, 20);
+        out->script_pubkey.bytes[24] = 0x88;  // OP_EQUALVERIFY
+        out->script_pubkey.bytes[25] = 0xAC;  // OP_CHECKSIG
+        out->script_pubkey.size = 26;
+      } else if (in->script_type == OutputScriptType_SSTXSUBMISSIONSH) {
+        out->script_pubkey.bytes[0] = 0xBA;  // OP_SSTX
+        out->script_pubkey.bytes[1] = 0xA9;  // OP_HASH_160
+        out->script_pubkey.bytes[2] = 0x14;  // pushing 20 bytes
+        memcpy(out->script_pubkey.bytes + 3, addr_raw_nomagic, 20);
+        out->script_pubkey.bytes[23] = 0x87;  // OP_EQUAL
+        out->script_pubkey.size = 24;
+      } else {
+        out->script_pubkey.bytes[0] = 0xBD;  // OP_SSTXCHANGE
+        out->script_pubkey.bytes[1] = 0x76;  // OP_DUP
+        out->script_pubkey.bytes[2] = 0xA9;  // OP_HASH_160
+        out->script_pubkey.bytes[3] = 0x14;  // pushing 20 bytes
+        memcpy(out->script_pubkey.bytes + 4, addr_raw_nomagic, 20);
+        out->script_pubkey.bytes[24] = 0x88;  // OP_EQUALVERIFY
+        out->script_pubkey.bytes[25] = 0xAC;  // OP_CHECKSIG
+        out->script_pubkey.size = 26;
+      }
+
+      if (in->script_type == OutputScriptType_SSTXSUBMISSIONPKH ||
+          in->script_type == OutputScriptType_SSTXSUBMISSIONSH) {
+        layoutConfirmTicketPurchase(coin, in);
+        if (!protectButton(ButtonRequestType_ButtonRequest_ConfirmOutput, false)) {
+          return -1;  // user aborted
+        }
+      }
+      return out->script_pubkey.size;
+    }
+  }
+#endif
+
   if (in->script_type == OutputScriptType_PAYTOOPRETURN) {
     // only 0 satoshi allowed for OP_RETURN
     if (in->amount != 0 || in->has_address || (in->address_n_count > 0) ||
@@ -351,6 +452,40 @@ uint32_t compile_script_sig(uint32_t address_type, const uint8_t *pubkeyhash,
     return 0;  // unsupported
   }
 }
+
+#if !BITCOIN_ONLY
+uint32_t compile_script_ssgen_sig(uint32_t address_type, const uint8_t *pubkeyhash,
+                            uint8_t *out) {
+  if (coinByAddressType(address_type)) {  // valid coin type
+    out[0] = 0xBB;                        // OP_SSGEN
+    out[1] = 0x76;                        // OP_DUP
+    out[2] = 0xA9;                        // OP_HASH_160
+    out[3] = 0x14;                        // pushing 20 bytes
+    memcpy(out + 4, pubkeyhash, 20);
+    out[24] = 0x88;  // OP_EQUALVERIFY
+    out[25] = 0xAC;  // OP_CHECKSIG
+    return 26;
+  } else {
+    return 0;  // unsupported
+  }
+}
+
+uint32_t compile_script_ssrtx_sig(uint32_t address_type, const uint8_t *pubkeyhash,
+                            uint8_t *out) {
+  if (coinByAddressType(address_type)) {  // valid coin type
+    out[0] = 0xBC;                        // OP_SSRTX
+    out[1] = 0x76;                        // OP_DUP
+    out[2] = 0xA9;                        // OP_HASH_160
+    out[3] = 0x14;                        // pushing 20 bytes
+    memcpy(out + 4, pubkeyhash, 20);
+    out[24] = 0x88;  // OP_EQUALVERIFY
+    out[25] = 0xAC;  // OP_CHECKSIG
+    return 26;
+  } else {
+    return 0;  // unsupported
+  }
+}
+#endif
 
 // if out == NULL just compute the length
 uint32_t compile_script_multisig(const CoinInfo *coin,

@@ -68,6 +68,7 @@ static uint8_t pubkey[33], sig[64];
 static uint8_t hash_prevouts[32], hash_sequence[32], hash_outputs[32];
 #if !BITCOIN_ONLY
 static uint8_t decred_hash_prefix[32];
+static bool is_ticket;
 #endif
 static uint8_t hash_inputs_check[32];
 static uint64_t to_spend, spending, change_spend;
@@ -500,6 +501,20 @@ bool compile_input_script_sig(TxInputType *tinput) {
   if (tinput->has_multisig) {
     tinput->script_sig.size = compile_script_multisig(coin, &(tinput->multisig),
                                                       tinput->script_sig.bytes);
+#if !BITCOIN_ONLY
+  } else if (coin->decred &&
+             (tinput->script_type == InputScriptType_SPENDSSGEN ||
+              tinput->script_type == InputScriptType_SPENDSSRTX)) {
+    uint8_t hash[20] = {0};
+    ecdsa_get_pubkeyhash(node.public_key, coin->curve->hasher_pubkey, hash);
+    if (tinput->script_type == InputScriptType_SPENDSSGEN) {
+            tinput->script_sig.size =
+                    compile_script_ssgen_sig(coin->address_type, hash, tinput->script_sig.bytes);
+    } else {
+            tinput->script_sig.size =
+                    compile_script_ssrtx_sig(coin->address_type, hash, tinput->script_sig.bytes);
+    }
+#endif
   } else {  // SPENDADDRESS
     uint8_t hash[20] = {0};
     ecdsa_get_pubkeyhash(node.public_key, coin->curve->hasher_pubkey, hash);
@@ -572,6 +587,7 @@ void signing_init(const SignTx *msg, const CoinInfo *_coin,
     size += 4;                              // Decred expiry
     size += ser_length_size(inputs_count);  // Witness inputs count
   }
+  is_ticket = false;
 #endif
 
   tx_weight = 4 * size;
@@ -664,6 +680,16 @@ static bool is_internal_input_script_type(const TxInputType *txinput) {
       txinput->script_type == InputScriptType_SPENDWITNESS) {
     return true;
   }
+
+#if !BITCOIN_ONLY
+  if (coin->decred) {
+    if (txinput->script_type == InputScriptType_SPENDSSGEN ||
+        txinput->script_type == InputScriptType_SPENDSSRTX) {
+      return true;
+    }
+  }
+#endif
+
   return false;
 }
 
@@ -674,6 +700,16 @@ static bool is_change_output_script_type(const TxOutputType *txoutput) {
       txoutput->script_type == OutputScriptType_PAYTOWITNESS) {
     return true;
   }
+
+#if !BITCOIN_ONLY
+  if (coin->decred) {
+    if (txoutput->script_type == OutputScriptType_SSTXCHANGE ||
+        txoutput->script_type == OutputScriptType_SSTXCOMMITMENTOWNED) {
+      return true;
+    }
+  }
+#endif
+
   return false;
 }
 
@@ -724,6 +760,27 @@ static bool signing_validate_output(TxOutputType *txoutput) {
     signing_abort();
     return false;
   }
+
+#if !BITCOIN_ONLY
+  if (coin->decred) {
+    if (txoutput->script_type == OutputScriptType_SSTXCOMMITMENTOWNED) {
+      if (txoutput->has_address || (txoutput->address_n_count == 0) ||
+          txoutput->has_multisig) {
+        fsm_sendFailure(FailureType_Failure_DataError,
+                        _("SSTXCOMMITMENTOWNED has address, no address_n, or a multisig"));
+        signing_abort();
+        return false;
+      }
+      if (txoutput->amount != 0) {
+        fsm_sendFailure(FailureType_Failure_DataError,
+                        _("SSTXCOMMITMENTOWNED output with non-zero amount"));
+        signing_abort();
+        return false;
+      }
+      return true;
+    }
+  }
+#endif
 
   if (txoutput->address_n_count > 0 &&
       !is_change_output_script_type(txoutput)) {
@@ -877,6 +934,53 @@ static bool signing_check_output(TxOutputType *txoutput) {
   // Phase1: Check outputs
   //   add it to hash_outputs
   //   ask user for permission
+  //
+#if !BITCOIN_ONLY
+  if (coin->decred) {
+    // If we expect this is a ticket, do a basic sanity check. Also
+    // throw if ticket script types are found in a non-ticket.
+    if (idx1 == 0) {
+      if (txoutput->script_type == OutputScriptType_SSTXSUBMISSIONPKH) {
+        if (outputs_count != 3) {
+          fsm_sendFailure(FailureType_Failure_DataError, _("Ticket has wrong number of outputs."));
+          signing_abort();
+          return false;
+	}
+        is_ticket = true;
+      } else if (txoutput->script_type == OutputScriptType_SSTXSUBMISSIONSH) {
+        if (outputs_count != 5) {
+          fsm_sendFailure(FailureType_Failure_DataError, _("Ticket has wrong number of outputs."));
+          signing_abort();
+          return false;
+        }
+        is_ticket = true;
+      }
+    } else if (is_ticket) {
+        if (idx1 == 1 && txoutput->script_type != OutputScriptType_SSTXCOMMITMENTOWNED) {
+          fsm_sendFailure(FailureType_Failure_DataError, _("Ticket's second output must be a SSTXCOMMITMENTOWNED."));
+          signing_abort();
+          return false;
+	} else if ((idx1 == 2 || idx1 == 4) && txoutput->script_type != OutputScriptType_SSTXCHANGE) {
+          fsm_sendFailure(FailureType_Failure_DataError, _("Ticket does not have a SSTXCHANGE."));
+          signing_abort();
+          return false;
+         } else if ( idx1 == 3 && txoutput->script_type != OutputScriptType_PAYTOOPRETURN) {
+          fsm_sendFailure(FailureType_Failure_DataError, _("Ticket missing second commitment."));
+          signing_abort();
+          return false;
+	 }
+    if (!is_ticket &&
+        (txoutput->script_type == OutputScriptType_SSTXSUBMISSIONPKH ||
+        txoutput->script_type == OutputScriptType_SSTXSUBMISSIONSH ||
+        txoutput->script_type == OutputScriptType_SSTXCHANGE ||
+        txoutput->script_type == OutputScriptType_SSTXCOMMITMENTOWNED)) {
+          fsm_sendFailure(FailureType_Failure_DataError, _("Found unexpected stake output."));
+          signing_abort();
+          return false;
+      }
+    }
+  }
+#endif
 
   // check for change address
   bool is_change = false;
@@ -1001,6 +1105,17 @@ static bool signing_confirm_tx(void) {
     }
   }
 
+#if !BITCOIN_ONLY
+  if (coin->decred && is_ticket) {
+    layoutConfirmTicket(coin, to_spend - change_spend, fee);
+    if (!protectButton(ButtonRequestType_ButtonRequest_SignTx, false)) {
+      fsm_sendFailure(FailureType_Failure_ActionCancelled, NULL);
+      signing_abort();
+      return false;
+    }
+    return true;
+  }
+#endif
   // last confirmation
   layoutConfirmTx(coin, to_spend - change_spend, fee);
   if (!protectButton(ButtonRequestType_ButtonRequest_SignTx, false)) {
@@ -1314,14 +1429,21 @@ void signing_txack(TransactionType *tx) {
       to_spend += tx->inputs[0].amount;
 
       tx_weight += tx_input_weight(coin, &tx->inputs[0]);
+
+      bool is_decred = false;
 #if !BITCOIN_ONLY
       if (coin->decred) {
         tx_weight += tx_decred_witness_weight(&tx->inputs[0]);
+        is_decred = true;
       }
 #endif
 
       if (tx->inputs[0].script_type == InputScriptType_SPENDMULTISIG ||
-          tx->inputs[0].script_type == InputScriptType_SPENDADDRESS) {
+          tx->inputs[0].script_type == InputScriptType_SPENDADDRESS ||
+	  (is_decred &&
+	   (tx->inputs[0].script_type == InputScriptType_SPENDSSGEN ||
+	   tx->inputs[0].script_type == InputScriptType_SPENDSSRTX
+	   ))) {
 #if !ENABLE_SEGWIT_NONSEGWIT_MIXING
         // don't mix segwit and non-segwit inputs
         if (idx1 > 0 && to.is_segwit == true) {
