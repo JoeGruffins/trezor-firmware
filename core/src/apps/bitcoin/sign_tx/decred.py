@@ -75,9 +75,37 @@ class Decred(Bitcoin):
     async def step2_approve_outputs(self) -> None:
         write_bitcoin_varint(self.serialized_tx, self.tx_info.tx.outputs_count)
         write_bitcoin_varint(self.h_prefix, self.tx_info.tx.outputs_count)
+        isTicket = False
         for i in range(self.tx_info.tx.outputs_count):
             # STAGE_REQUEST_2_OUTPUT in legacy
             txo = await helpers.request_tx_output(self.tx_req, i, self.coin)
+            # If we expect this is a ticket, do a basic sanity check. Also
+            # throw if ticket script types are found in a non-ticket.
+            if i == 0:
+                if txo.script_type == OutputScriptType.SSTXSUBMISSIONPKH:
+                    if self.tx_info.tx.outputs_count != 3:
+                        raise wire.DataError("Ticket has wrong number of outputs.")
+                    isTicket = True
+                elif txo.script_type == OutputScriptType.SSTXSUBMISSIONSH:
+                    if self.tx_info.tx.outputs_count != 5:
+                        raise wire.DataError("Ticket has wrong number of outputs.")
+                    isTicket = True
+            elif isTicket:
+                if i == 1 and txo.script_type != OutputScriptType.SSTXCOMMITMENTOWNED:
+                    raise wire.DataError(
+                        "Ticket's second output must be a SSTXCOMMITMENTOWNED."
+                    )
+                elif i in (2, 4) and txo.script_type != OutputScriptType.SSTXCHANGE:
+                    raise wire.DataError("Ticket does not have a SSTXCHANGE.")
+                elif i == 3 and txo.script_type != OutputScriptType.PAYTOOPRETURN:
+                    raise wire.DataError("Ticket missing second commitment.")
+            if not isTicket and txo.script_type in (
+                OutputScriptType.SSTXSUBMISSIONPKH,
+                OutputScriptType.SSTXSUBMISSIONSH,
+                OutputScriptType.SSTXCHANGE,
+                OutputScriptType.SSTXCOMMITMENTOWNED,
+            ):
+                raise wire.DataError("Found unexpected stake output.")
             script_pubkey = self.output_derive_script(txo)
             orig_txo = None  # type: Optional[TxOutput]
             if txo.orig_hash:
@@ -122,7 +150,13 @@ class Decred(Bitcoin):
         self.write_tx_output(self.serialized_tx, txo, script_pubkey)
 
     def output_is_change(self, txo: TxOutput) -> bool:
-        if txo.script_type == OutputScriptType.SSTXCHANGE:
+        # SSTXCHANGE value has been check as 0 and the SSTXCOMMITMENTOWNED has
+        # been confirmed as paying back to this wallet so there is no need to
+        # confirm.
+        if txo.script_type in (
+            OutputScriptType.SSTXCHANGE,
+            OutputScriptType.SSTXCOMMITMENTOWNED,
+        ):
             return True
         return self.tx_info.output_is_change(txo)
 
