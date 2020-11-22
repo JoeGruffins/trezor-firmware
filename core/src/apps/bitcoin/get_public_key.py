@@ -22,8 +22,10 @@ async def get_public_key(ctx: wire.Context, msg: GetPublicKey) -> PublicKey:
 
     if (
         script_type in (InputScriptType.SPENDADDRESS, InputScriptType.SPENDMULTISIG)
-        or coin.decred
-        and script_type in (InputScriptType.SPENDSSRTX, InputScriptType.SPENDSSGEN)
+        or (
+            coin.decred
+            and script_type in (InputScriptType.SPENDSSRTX, InputScriptType.SPENDSSGEN)
+        )
         and coin.xpub_magic is not None
     ):
         node_xpub = node.serialize_public(coin.xpub_magic)

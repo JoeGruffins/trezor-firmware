@@ -353,7 +353,9 @@ def sanitize_tx_output(txo: TxOutput, coin: CoinInfo) -> TxOutput:
     if (
         txo.address_n
         and txo.script_type not in common.CHANGE_OUTPUT_SCRIPT_TYPES
-        and txo.script_type != OutputScriptType.SSTXCOMMITMENTOWNED
+        and not (
+            coin.decred and txo.script_type == OutputScriptType.SSTXCOMMITMENTOWNED
+        )
     ):
         raise wire.DataError("Output's address_n provided but not expected.")
     if txo.amount is None:

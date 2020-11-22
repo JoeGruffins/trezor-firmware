@@ -134,7 +134,6 @@ class TestMsgSigntxDecred:
                     request_output(0),
                     proto.ButtonRequest(code=B.ConfirmOutput),
                     request_output(1),
-                    proto.ButtonRequest(code=B.ConfirmOutput),
                     request_output(2),
                     proto.ButtonRequest(code=B.SignTx),
                     request_input(0),
