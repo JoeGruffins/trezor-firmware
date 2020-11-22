@@ -9,7 +9,7 @@ from trezor.utils import HashWriter, ensure
 
 from apps.common.writers import write_bitcoin_varint
 
-from .. import addresses, common, multisig, scripts, writers
+from .. import addresses, common, multisig, scripts, scripts_decred, writers
 from ..common import ecdsa_hash_pubkey, ecdsa_sign
 from . import approvers, helpers, progress
 from .bitcoin import Bitcoin
@@ -152,11 +152,11 @@ class Decred(Bitcoin):
                     ecdsa_hash_pubkey(key_sign_pub, self.coin)
                 )
             elif txi_sign.script_type == InputScriptType.SPENDSSRTX:
-                prev_pkscript = scripts.input_script_ssrtx(
+                prev_pkscript = scripts_decred.input_script_ssrtx(
                     ecdsa_hash_pubkey(key_sign_pub, self.coin)
                 )
             elif txi_sign.script_type == InputScriptType.SPENDSSGEN:
-                prev_pkscript = scripts.input_script_ssgen(
+                prev_pkscript = scripts_decred.input_script_ssgen(
                     ecdsa_hash_pubkey(key_sign_pub, self.coin)
                 )
             else:
@@ -265,7 +265,7 @@ class Decred(Bitcoin):
         elif txo.script_type == OutputScriptType.SSTXCOMMITMENTOWNED:
             assert txo.op_return_data is not None  # checked in sanitize_tx_output
             # Verify that the address this script pays to is owned by the wallet.
-            wantpkh = scripts.pkh_from_sstxcommitment(txo.op_return_data)
+            wantpkh = scripts_decred.pkh_from_sstxcommitment(txo.op_return_data)
             key = self.keychain.derive(txo.address_n)
             gotpkh = ecdsa_hash_pubkey(key.public_key(), self.coin)
             if gotpkh != wantpkh:
@@ -273,16 +273,16 @@ class Decred(Bitcoin):
             return scripts.output_script_paytoopreturn(txo.op_return_data)
         elif txo.script_type == OutputScriptType.SSTXSUBMISSIONPKH:
             assert txo.address is not None  # checked in sanitize_tx_output
-            return scripts.output_script_sstxsubmissionpkh(txo.address)
+            return scripts_decred.output_script_sstxsubmissionpkh(txo.address)
         elif txo.script_type == OutputScriptType.SSTXSUBMISSIONSH:
             assert txo.address is not None  # checked in sanitize_tx_output
-            return scripts.output_script_sstxsubmissionsh(txo.address)
+            return scripts_decred.output_script_sstxsubmissionsh(txo.address)
         elif txo.script_type == OutputScriptType.SSTXCHANGE:
             assert txo.address is not None  # checked in sanitize_tx_output
             # Change addresses are not currently used. Inputs should be exact.
             if txo.amount != 0:
                 raise wire.DataError("Only value of 0 allowed for sstx change")
-            return scripts.output_script_sstxchange(txo.address)
+            return scripts_decred.output_script_sstxchange(txo.address)
 
         if txo.address_n:
             # change output

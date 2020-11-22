@@ -24,12 +24,11 @@ def get_address(
     multisig: MultisigRedeemScriptType = None,
 ) -> str:
 
-    if script_type in [
-        InputScriptType.SPENDADDRESS,
-        InputScriptType.SPENDMULTISIG,
-        InputScriptType.SPENDSSRTX,
-        InputScriptType.SPENDSSGEN,
-    ]:
+    if (
+        script_type in (InputScriptType.SPENDADDRESS, InputScriptType.SPENDMULTISIG)
+        or coin.decred
+        and script_type in (InputScriptType.SPENDSSRTX, InputScriptType.SPENDSSGEN)
+    ):
         if multisig:  # p2sh multisig
             pubkey = node.public_key()
             index = multisig_pubkey_index(multisig, pubkey)
