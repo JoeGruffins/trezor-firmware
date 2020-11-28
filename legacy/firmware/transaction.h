@@ -60,6 +60,10 @@ bool compute_address(const CoinInfo *coin, InputScriptType script_type,
                      char address[MAX_ADDR_SIZE]);
 uint32_t compile_script_sig(uint32_t address_type, const uint8_t *pubkeyhash,
                             uint8_t *out);
+uint32_t compile_script_ssgen_sig(uint32_t address_type, const uint8_t *pubkeyhash,
+                            uint8_t *out);
+uint32_t compile_script_ssrtx_sig(uint32_t address_type, const uint8_t *pubkeyhash,
+                            uint8_t *out);
 uint32_t compile_script_multisig(const CoinInfo *coin,
                                  const MultisigRedeemScriptType *multisig,
                                  uint8_t *out);

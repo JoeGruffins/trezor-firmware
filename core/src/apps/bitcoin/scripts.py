@@ -41,7 +41,11 @@ def input_derive_script(
     pubkey: bytes,
     signature: bytes,
 ) -> bytes:
-    if script_type == InputScriptType.SPENDADDRESS:
+    if (
+        script_type == InputScriptType.SPENDADDRESS
+        or coin.decred
+        and script_type in (InputScriptType.SPENDSSRTX, InputScriptType.SPENDSSGEN)
+    ):
         # p2pkh or p2sh
         return input_script_p2pkh_or_p2sh(pubkey, signature, hash_type)
 

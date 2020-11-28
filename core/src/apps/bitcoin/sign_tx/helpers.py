@@ -350,7 +350,13 @@ def sanitize_tx_prev_input(txi: PrevInput, coin: CoinInfo) -> PrevInput:
 def sanitize_tx_output(txo: TxOutput, coin: CoinInfo) -> TxOutput:
     if txo.multisig and txo.script_type not in common.MULTISIG_OUTPUT_SCRIPT_TYPES:
         raise wire.DataError("Multisig field provided but not expected.")
-    if txo.address_n and txo.script_type not in common.CHANGE_OUTPUT_SCRIPT_TYPES:
+    if (
+        txo.address_n
+        and txo.script_type not in common.CHANGE_OUTPUT_SCRIPT_TYPES
+        and not (
+            coin.decred and txo.script_type == OutputScriptType.SSTXCOMMITMENTOWNED
+        )
+    ):
         raise wire.DataError("Output's address_n provided but not expected.")
     if txo.amount is None:
         raise wire.DataError("Missing amount field.")
@@ -361,6 +367,14 @@ def sanitize_tx_output(txo: TxOutput, coin: CoinInfo) -> TxOutput:
         if txo.amount != 0:
             raise wire.DataError("OP_RETURN output with non-zero amount")
         if txo.address or txo.address_n or txo.multisig:
+            raise wire.DataError("OP_RETURN output with address or multisig")
+    elif txo.script_type == OutputScriptType.SSTXCOMMITMENTOWNED:
+        # sstxcommitment that should pay to the wallet op_return output
+        if txo.op_return_data is None:
+            raise wire.DataError("OP_RETURN output without op_return_data")
+        if txo.amount != 0:
+            raise wire.DataError("OP_RETURN output with non-zero amount")
+        if txo.address or txo.multisig:
             raise wire.DataError("OP_RETURN output with address or multisig")
     else:
         if txo.op_return_data:

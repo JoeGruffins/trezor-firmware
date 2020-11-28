@@ -6,7 +6,7 @@ if __debug__:
     try:
         from typing import Dict, List  # noqa: F401
         from typing_extensions import Literal  # noqa: F401
-        EnumTypeInputScriptType = Literal[0, 1, 2, 3, 4]
+        EnumTypeInputScriptType = Literal[0, 1, 2, 3, 4, 5, 6]
     except ImportError:
         pass
 
@@ -40,5 +40,5 @@ class AuthorizeCoinJoin(p.MessageType):
             3: ('fee_per_anonymity', p.UVarintType, None),
             4: ('address_n', p.UVarintType, p.FLAG_REPEATED),
             5: ('coin_name', p.UnicodeType, "Bitcoin"),  # default=Bitcoin
-            6: ('script_type', p.EnumType("InputScriptType", (0, 1, 2, 3, 4)), 0),  # default=SPENDADDRESS
+            6: ('script_type', p.EnumType("InputScriptType", (0, 1, 2, 3, 4, 5, 6)), 0),  # default=SPENDADDRESS
         }

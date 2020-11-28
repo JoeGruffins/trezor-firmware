@@ -49,6 +49,17 @@ async def confirm_output(ctx: wire.Context, output: TxOutput, coin: CoinInfo) ->
                 hex_data = hex_data[: (18 * 5 - 3)] + "..."
             text = Text("OP_RETURN", ui.ICON_SEND, ui.GREEN)
             text.mono(*split_op_return(hex_data))
+    elif coin.decred and output.script_type in (
+        OutputScriptType.SSTXSUBMISSIONPKH,
+        OutputScriptType.SSTXSUBMISSIONSH,
+    ):
+        address = output.address
+        assert address is not None
+        address_short = addresses.address_short(coin, address)
+        text = Text("Purchase ticket", ui.ICON_SEND, ui.GREEN)
+        text.normal(format_coin_amount(output.amount, coin))
+        text.normal("with voting rights to")
+        text.mono(*split_address(address_short))
     else:
         address = output.address
         assert address is not None

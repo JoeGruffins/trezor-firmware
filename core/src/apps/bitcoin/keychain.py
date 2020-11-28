@@ -71,7 +71,11 @@ def validate_path_against_script_type(
     else:
         assert address_n is not None and script_type is not None
 
-    if script_type == I.SPENDADDRESS and not multisig:
+    if (
+        script_type == I.SPENDADDRESS
+        or (coin.decred and script_type in (I.SPENDSSRTX, I.SPENDSSGEN))
+        and not multisig
+    ):
         patterns.append(PATTERN_BIP44)
         if coin.coin_name in BITCOIN_NAMES:
             patterns.append(PATTERN_GREENADDRESS_A)
