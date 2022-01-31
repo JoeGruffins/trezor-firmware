@@ -323,6 +323,7 @@ class OutputScriptType(IntEnum):
 class DecredStakingSpendType(IntEnum):
     SSGen = 0
     SSRTX = 1
+    TGen = 2
 
 
 class AmountUnit(IntEnum):

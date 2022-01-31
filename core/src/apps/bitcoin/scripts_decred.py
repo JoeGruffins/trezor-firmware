@@ -133,3 +133,10 @@ def sstxcommitment_pkh(pkh: bytes, amount: int) -> bytes:
     write_uint64_le(w, amount)
     write_bytes_fixed(w, b"\x00\x58", 2)  # standard fee limits
     return w
+
+# Spend from a treasury generation.
+def write_output_script_tgen_prefixed(w: Writer, pkh: bytes) -> None:
+    utils.ensure(len(pkh) == 20)
+    write_bitcoin_varint(w, 26)
+    w.append(0xC3)  # OP_TGEN
+    scripts.write_output_script_p2pkh(w, pkh)

@@ -4,3 +4,4 @@
 
 SSGen = 0
 SSRTX = 1
+TGen = 2

@@ -173,6 +173,10 @@ class Decred(Bitcoin):
                         scripts_decred.write_output_script_ssgen_prefixed(
                             h_witness, ecdsa_hash_pubkey(key_sign_pub, self.coin)
                         )
+                    elif txi_sign.decred_staking_spend == DecredStakingSpendType.TGen:
+                        scripts_decred.write_output_script_tgen_prefixed(
+                            h_witness, ecdsa_hash_pubkey(key_sign_pub, self.coin)
+                        )
                     elif txi_sign.script_type == InputScriptType.SPENDMULTISIG:
                         assert txi_sign.multisig is not None
                         scripts_decred.write_output_script_multisig(
