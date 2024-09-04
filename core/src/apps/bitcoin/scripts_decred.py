@@ -170,7 +170,7 @@ def output_script_p2sh(scripthash: bytes) -> bytearray:
     return s
 
 
-def output_derive_script(tree: int, stakeType: int, addr: str, coin: CoinInfo) -> bytes:
+def output_derive_script(tree: int | None, stakeType: int | None, addr: str, coin: CoinInfo) -> bytes:
     from trezor.crypto import base58
 
     from apps.common import address_type
@@ -180,7 +180,14 @@ def output_derive_script(tree: int, stakeType: int, addr: str, coin: CoinInfo) -
     except ValueError:
         raise DataError("Invalid address")
 
-    if tree == _STAKE_TREE:
+    isStakeOutput = False
+    if tree is not None:
+        if stakeType is not None:
+            if tree == _STAKE_TREE:
+                isStakeOutput = True
+
+    if isStakeOutput:
+        assert stakeType is not None
         if stakeType == DecredStakingSpendType.SSGen:
             script = utils.empty_bytearray(26)
             script.append(_OP_SSGEN)
