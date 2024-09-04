@@ -438,7 +438,12 @@ class Decred(Bitcoin):
             node = self.keychain.derive(txi.address_n)
 
         address = addresses.get_address(txi.script_type, self.coin, node, txi.multisig)
-        assert txi.decred_tree is not None and txi.decred_staking_spend is not None
+        tree = 0 # regular transaction
+        if txi.decred_tree is not None:
+            tree = txi.decred_tree
+        staking_spend = False
+        if txi.decred_staking_spend is not None:
+            staking_spend = txi.decred_staking_spend
         return scripts_decred.output_derive_script(
-            txi.decred_tree, txi.decred_staking_spend, address, self.coin
+            tree, staking_spend, address, self.coin
         )
