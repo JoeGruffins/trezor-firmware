@@ -170,7 +170,9 @@ def output_script_p2sh(scripthash: bytes) -> bytearray:
     return s
 
 
-def output_derive_script(tree: int | None, stakeType: int | None, addr: str, coin: CoinInfo) -> bytes:
+def output_derive_script(
+    tree: int | None, stakeType: int | None, addr: str, coin: CoinInfo
+) -> bytes:
     from trezor.crypto import base58
 
     from apps.common import address_type
